@@ -21,8 +21,14 @@ async def send_message(session, chat_id, text):
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     try:
         async with session.post(url, json=payload) as response:
-            return await response.json()
-    except:
+            result = await response.json()
+            if not result.get("ok"):
+                logging.error(f"❌ Ошибка Telegram API для {chat_id}: {result}")
+            else:
+                logging.info(f"✅ Сообщение отправлено {chat_id}")
+            return result
+    except Exception as e:
+        logging.error(f"❌ Ошибка сети при отправке {chat_id}: {e}")
         return None
 
 @routes.get("/")
@@ -36,14 +42,19 @@ async def sync_handler(request):
         users = data.get("users", [])
         with open(USERS_FILE, "w") as f:
             json.dump(users, f)
+        logging.info(f"📥 Синхронизация базы: {len(users)} пользователей")
         return web.Response(text="Synced", status=200)
     except Exception as e:
+        logging.error(f"❌ Ошибка синхронизации: {e}")
         return web.Response(text=str(e), status=500)
 
 @routes.post("/webhook")
 async def webhook_handler(request):
     try:
         data = await request.json()
+        # Логируем входящий апдейт, чтобы видеть, что Телеграм вообще долбится к нам
+        logging.info(f"📨 Получен апдейт: {json.dumps(data)}")
+
         if "message" in data:
             msg = data["message"]
             chat_id = msg["chat"]["id"]
@@ -51,6 +62,7 @@ async def webhook_handler(request):
             text = msg.get("text", "")
 
             async with ClientSession() as session:
+                # 1. Логика админа
                 if user_id == ADMIN_ID and text.startswith("/broadcast "):
                     broadcast_msg = text.replace("/broadcast ", "")
                     targets = []
@@ -64,16 +76,18 @@ async def webhook_handler(request):
                         if res and res.get("ok"):
                             count += 1
                     
-                    await send_message(session, ADMIN_ID, f"✅ Рассылка завершена: {count}")
+                    await send_message(session, ADMIN_ID, f"📢 Рассылка завершена: {count} получено")
                 
                 elif user_id == ADMIN_ID and text == "/status":
                     await send_message(session, ADMIN_ID, "🟢 Микросервис активен.")
 
-                else:
+                # 2. Логика для ВСЕХ остальных (заглушка)
+                # Убрали else, чтобы админ тоже мог видеть заглушку, если пишет не команду
+                elif user_id != ADMIN_ID: 
                     await send_message(session, chat_id, MAINTENANCE_TEXT)
 
-    except Exception:
-        pass
+    except Exception as e:
+        logging.error(f"❌ Критическая ошибка в вебхуке: {e}")
     
     return web.Response(status=200)
 
