@@ -5,7 +5,6 @@ from aiohttp import web, ClientSession
 
 BOT_TOKEN = "8345829799:AAE3Mi4q-gmscsxjCcCJnYKukGuMYFdcbpU"
 ADMIN_ID = 7040587293
-
 USERS_FILE = "users_db.json"
 MAINTENANCE_TEXT = (
     "⚙️ <b>Бот на техническом перерыве</b>\n\n"
@@ -15,6 +14,7 @@ MAINTENANCE_TEXT = (
 )
 
 logging.basicConfig(level=logging.INFO)
+routes = web.RouteTableDef()
 
 async def send_message(session, chat_id, text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -25,19 +25,22 @@ async def send_message(session, chat_id, text):
     except:
         return None
 
+@routes.get("/")
 async def root_handler(request):
     return web.Response(text="Microservice is running correctly!", status=200)
 
+@routes.post("/sync")
 async def sync_handler(request):
     try:
         data = await request.json()
         users = data.get("users", [])
         with open(USERS_FILE, "w") as f:
             json.dump(users, f)
-        return web.Response(text="OK", status=200)
+        return web.Response(text="Synced", status=200)
     except Exception as e:
         return web.Response(text=str(e), status=500)
 
+@routes.post("/webhook")
 async def webhook_handler(request):
     try:
         data = await request.json()
@@ -61,7 +64,7 @@ async def webhook_handler(request):
                         if res and res.get("ok"):
                             count += 1
                     
-                    await send_message(session, ADMIN_ID, f"✅ Рассылка завершена. Отправлено: {count}")
+                    await send_message(session, ADMIN_ID, f"✅ Рассылка завершена: {count}")
                 
                 elif user_id == ADMIN_ID and text == "/status":
                     await send_message(session, ADMIN_ID, "🟢 Микросервис активен.")
@@ -75,9 +78,7 @@ async def webhook_handler(request):
     return web.Response(status=200)
 
 app = web.Application()
-app.router.add_get("/", root_handler)
-app.router.add_post("/webhook", webhook_handler)
-app.router.add_post("/sync", sync_handler)
+app.add_routes(routes)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
