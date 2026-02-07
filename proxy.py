@@ -25,6 +25,9 @@ async def send_message(session, chat_id, text):
     except:
         return None
 
+async def root_handler(request):
+    return web.Response(text="Microservice is running correctly!", status=200)
+
 async def sync_handler(request):
     try:
         data = await request.json()
@@ -32,8 +35,8 @@ async def sync_handler(request):
         with open(USERS_FILE, "w") as f:
             json.dump(users, f)
         return web.Response(text="OK", status=200)
-    except Exception:
-        return web.Response(status=500)
+    except Exception as e:
+        return web.Response(text=str(e), status=500)
 
 async def webhook_handler(request):
     try:
@@ -61,7 +64,7 @@ async def webhook_handler(request):
                     await send_message(session, ADMIN_ID, f"✅ Рассылка завершена. Отправлено: {count}")
                 
                 elif user_id == ADMIN_ID and text == "/status":
-                    await send_message(session, ADMIN_ID, "🟢 Микросервис активен и готов к работе.")
+                    await send_message(session, ADMIN_ID, "🟢 Микросервис активен.")
 
                 else:
                     await send_message(session, chat_id, MAINTENANCE_TEXT)
@@ -72,6 +75,7 @@ async def webhook_handler(request):
     return web.Response(status=200)
 
 app = web.Application()
+app.router.add_get("/", root_handler)
 app.router.add_post("/webhook", webhook_handler)
 app.router.add_post("/sync", sync_handler)
 
